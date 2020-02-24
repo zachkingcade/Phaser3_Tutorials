@@ -6,7 +6,9 @@ gameScene.init = function(){
   this.playerSpeed = 2;
 
   this.maxY = 280;
-  this.minY = 130;
+  this.minY = 80;
+
+  this.isEnding = false;
 }
 
 //load assets
@@ -27,14 +29,23 @@ gameScene.create = function(){
   this.player = this.add.sprite(50,180,"player");
   this.player.setScale(.5);
 
-  //---Create enemy sprite---
-  this.enemy = this.add.sprite(450,180,"enemy")
-  this.enemy.setScale(.5)
-  this.enemy.flipX = true;
-  this.enemy.speed = Math.trunc(1 + Math.random() * 3);
-  if (Math.random() < .5){
-    this.enemy.speed *= -1;
-  }
+  //---Create a group of enemy sprites---
+  this.enemies = this.add.group({
+    key: 'enemy',
+    repeat: 5,
+    setXY: {
+      x: 90,
+      y: 90,
+      stepX: 85,
+      stepY: 20
+    }
+  });
+  Phaser.Actions.ScaleXY(this.enemies.getChildren(),-.5,-.5);
+  Phaser.Actions.Call(this.enemies.getChildren(), function(enemy){
+    enemy.flipX = true;
+    enemy.speed = Math.trunc(1 + Math.random() * 3);
+    if (Math.random() < .5){enemy.speed *= -1;};
+  }, this)
 
   //---Create Goal Sprite---
   this.goal = this.add.sprite(this.sys.game.config.width - 80,180,"goal");
@@ -43,35 +54,46 @@ gameScene.create = function(){
 
 //called up to 60 times a second
 gameScene.update = function (){
+  if (this.isEnding){return;};
+
   //check for active input
   if(this.input.activePointer.isDown){
     this.player.x += this.playerSpeed;
   }
 
-  //move enemies
-  this.enemy.y += this.enemy.speed;
+  //move enemies and check enemy collison with walls
+  let dragons =  this.enemies.getChildren();
+  let dragonsNum = dragons.length;
+
+  for (let i = 0; i < dragonsNum; i++){
+    //move enemies
+    dragons[i].y += dragons[i].speed; 
+
+    //let enemyRect = dragons[i].getBounds();
+
+    //if enemy hits wall
+    if (dragons[i].speed < 0 && dragons[i].y <= this.minY){
+      dragons[i].speed *= -1;
+    } else if (dragons[i].speed > 0 && dragons[i].y >= this.maxY){
+      dragons[i].speed *= -1;
+    }
+  }
 
   //---------------collisons---------------
 
   let playerRect = this.player.getBounds();
   let goalRect = this.goal.getBounds();
-  let enemyRect = this.enemy.getBounds();
 
-  //player Collides with enemy
-  if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect,enemyRect)){
-    //lose message
-    console.log("Damn Bro! you lose!");
+  //player Collides with any enemy in the group
+  for (let i = 0; i < dragonsNum; i++){
+    let enemyRect = dragons[i].getBounds();
+    if (Phaser.Geom.Intersects.RectangleToRectangle(playerRect,enemyRect)){
+      //lose message
+      console.log("Damn Bro! you lose!");
 
-    //restart scene
-    this.scene.restart();
-    return;
-  }
-
-  //if enemy hits wall
-  if (this.enemy.speed < 0 && this.enemy.y <= this.minY){
-    this.enemy.speed *= -1;
-  } else if (this.enemy.speed > 0 && this.enemy.y >= this.maxY){
-    this.enemy.speed *= -1;
+      //restart scene
+      return this.GameOver();
+    }
   }
 
   //player collides with goal
@@ -80,9 +102,22 @@ gameScene.update = function (){
     console.log("Yay! you made it!")
 
     //restart scene
-    this.scene.restart();
-    return;
+    return this.GameOver();
   }
+}
+
+gameScene.GameOver = function(){
+  //makes sure not to run this function multiple times
+  this.isEnding = true;
+  //shake camera event
+  this.cameras.main.shake(500)
+  //listen for event end
+  this.cameras.main.on("camerashakecomplete",function(){
+    this.cameras.main.fade(500)
+  },this)
+  this.cameras.main.on("camerafadeoutcomplete",function(){
+    this.scene.restart();
+  },this)
 }
 
 //set the configuration of the game
